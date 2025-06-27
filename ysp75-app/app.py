@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 
 DATA_PATH = "players_data-2024_2025.csv"
+st.write("Current working directory:", os.getcwd())
+st.write("Files in directory:", os.listdir())
 
 @st.cache_data
 def load_players():
