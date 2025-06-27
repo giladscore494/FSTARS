@@ -11,46 +11,49 @@ def load_players():
         st.stop()
     return pd.read_csv(DATA_PATH)
 
-def ysp_75_score(row):
+# דירוג הליגות - לצורך ניקוד איכות ליגה
+LEAGUE_SCORES = {
+    'Premier League': 1.0, 'La Liga': 0.95, 'Serie A': 0.9,
+    'Bundesliga': 0.9, 'Ligue 1': 0.85, 'Eredivisie': 0.75,
+    'Primeira Liga': 0.7, 'Championship': 0.6, 'MLS': 0.5
+}
+
+def ysp75_score(row):
     try:
-        age = row['Age']
-        mp = row['MP']
-        goals = row['Gls']
-        assists = row['Ast']
-        mins = row['Min']
-        xg = row.get('xG', 0)
-        xag = row.get('xAG', 0)
+        age = float(row["Age"])
+        goals = float(row["Gls"])
+        assists = float(row["Ast"])
+        minutes = float(row["Min"])
+        league = row["Comp"]
     except:
-        return None
+        return 0
 
-    if pd.isna(age) or age <= 0:
-        return None
+    if minutes == 0 or age == 0:
+        return 0
 
-    age_factor = max(0, 1.0 - (age - 18) * 0.07)
-    play_time_factor = min(mp / 30, 1.0)
-    goal_factor = (goals + assists + xg + xag) / (mins / 90 + 1)
-    
-    ysp_score = (age_factor * 0.5 + play_time_factor * 0.3 + goal_factor * 0.2) * 100
-    return round(ysp_score, 2)
+    gpa = (goals + assists) / (minutes / 90)  # תרומה למשחק
+    age_factor = 1 + (22 - age) * 0.05 if age < 22 else 1  # תגמול לצעירים
+    league_weight = LEAGUE_SCORES.get(league, 0.4)  # ברירת מחדל לליגות לא מוכרות
 
-# טען את הדאטה
+    score = gpa * age_factor * league_weight * 25
+    return round(score, 2)
+
+# טען דאטה
 df = load_players()
 
-# ממשק
+# ממשק משתמש
 st.title("🎯 YSP-75 – מדד סיכויי הצלחה לשחקן צעיר")
 
 name_input = st.text_input("הזן שם שחקן (באנגלית):")
 
 if name_input:
-    filtered = df[df['Player'].str.lower().str.contains(name_input.lower())]
+    filtered = df[df["Player"].str.lower().str.contains(name_input.lower())]
 
     if filtered.empty:
-        st.warning("שחקן לא נמצא בקובץ.")
+        st.warning("שחקן לא נמצא.")
     else:
         for _, row in filtered.iterrows():
-            st.subheader(f"{row['Player']} ({row['Squad']})")
-            score = ysp_75_score(row)
-            if score is not None:
-                st.markdown(f"**🔢 YSP-75 Score:** {score}/100")
-            else:
-                st.markdown("⚠️ לא ניתן לחשב ציון עבור שחקן זה (חסרים נתונים)")
+            st.subheader(row["Player"])
+            st.write(f"✳️ קבוצה: {row['Squad']} | ליגה: {row['Comp']} | גיל: {row['Age']}")
+            score = ysp75_score(row)
+            st.metric("YSP-75 Score", score)
