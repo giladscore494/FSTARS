@@ -2,101 +2,88 @@ import streamlit as st
 import pandas as pd
 import os
 
-# הגדרת נתיב מלא לקובץ CSV מתוך תיקיית האפליקציה
+# הגדרה של הנתיב לקובץ (בתוך תיקיית האפליקציה)
 DATA_PATH = os.path.join(os.path.dirname(__file__), "players_data-2024_2025.csv")
 
-# טוען את כל הנתונים עם שמירה בזיכרון
+# דירוג ליגות - ככל שהמספר נמוך יותר, הליגה איכותית יותר
+LEAGUE_RANKINGS = {
+    "Premier League": 1, "La Liga": 2, "Bundesliga": 3, "Serie A": 4, "Ligue 1": 5,
+    "Eredivisie": 6, "Primeira Liga": 7, "Brasileirão": 8, "Argentine Liga": 9,
+    "Belgian Pro League": 10, "Turkish Süper Lig": 11, "Swiss Super League": 12,
+    "Austrian Bundesliga": 13, "Scottish Premiership": 14, "MLS": 15
+}
+
+# טוען את קובץ הנתונים
 @st.cache_data
 def load_players():
     if not os.path.exists(DATA_PATH):
-        st.error("\u274c שגיאה: הקובץ 'players_data-2024_2025.csv' לא נמצא בתיקייה. ודא שהוא קיים לצד app.py.")
+        st.error("שגיאה: הקובץ 'players_data-2024_2025.csv' לא נמצא בתיקייה. ודא שהוא קיים לצד app.py.")
         st.stop()
     return pd.read_csv(DATA_PATH, low_memory=False)
 
-# טוען הנתונים
-players_df = load_players()
+df = load_players()
 
-# הכותרת והקלט
-st.title("\ud83c\udf1f YSP-75: דירוג פוטנציאל לשחקנים צעירים")
-name_input = st.text_input("הכנס שם שחקן:")
+# כותרת
+st.title("🌟 מדד YSP-75 לשחקנים צעירים")
 
-if name_input:
-    # בדיקה: עמודה נכונה
-    valid_columns = ["short_name", "Player"]
-    found_col = None
-    for col in valid_columns:
-        if col in players_df.columns:
-            found_col = col
-            break
+# שדה קלט לשם שחקן
+name_input = st.text_input("הכנס שם שחקן (חלקי או מלא):")
 
-    if not found_col:
-        st.error("\u274c לא נמצאה עמודת שמות תקינה בקובץ.")
-        st.stop()
+# ניסיון לאתר את שם העמודה של שם השחקן
+search_columns = ['short_name', 'Player', 'Name']
+name_column = None
+for col in search_columns:
+    if col in df.columns:
+        name_column = col
+        break
 
-    # סינון לפי שם (מזהה גם תווים קטנים)
-    filtered = players_df[players_df[found_col].str.lower().str.contains(name_input.lower())]
+if name_input and name_column:
+    filtered = df[df[name_column].str.lower().str.contains(name_input.lower())]
 
     if filtered.empty:
-        st.warning("\u26a0\ufe0f לא נמצא שחקן תואם.")
+        st.warning("לא נמצא שחקן בשם הזה.")
     else:
-        player = filtered.iloc[0]  # השחקן הראשון המתאים
+        player = filtered.iloc[0]
+        name = player[name_column]
+        age = player.get("age") or player.get("Age") or 0
+        minutes = player.get("minutes") or player.get("Min") or 0
+        goals = player.get("goals") or player.get("Gls") or 0
+        assists = player.get("assists") or player.get("Ast") or 0
+        league = player.get("league_name") or player.get("Comp") or "Unknown"
 
-        # חישוב מדד YSP-75 לפי שדות קיימים
-        age = player.get("Age", player.get("age", 0))
-        minutes = player.get("Min", player.get("minutes", 0))
-        goals = player.get("Gls", player.get("goals", 0))
-        assists = player.get("Ast", player.get("assists", 0))
-        league = player.get("Comp", player.get("league_name", ""))
+        # חישוב דירוג ליגה
+        league_rank = LEAGUE_RANKINGS.get(league, 20)
 
+        # חישוב מדד YSP-75
         try:
-            age = float(age)
-            minutes = float(minutes)
-            goals = float(goals)
-            assists = float(assists)
+            score = (
+                100
+                - int(age) * 1.5
+                + int(minutes) / 500
+                + int(goals) * 2.5
+                + int(assists) * 2
+                - league_rank
+            )
+            score = round(score, 2)
         except:
-            st.error("\u274c שגיאה בקריאת ערכי גיל או סטטיסטיקות")
-            st.stop()
+            score = 0
 
-        # דירוג ליגה (דירוג בינ"ל מדומה)
-        LEAGUE_SCORES = {
-            'Premier League': 1.0, 'La Liga': 0.95, 'Serie A': 0.9,
-            'Bundesliga': 0.9, 'Ligue 1': 0.85,
-            'Championship': 0.75, 'Eredivisie': 0.7, 'Liga Portugal': 0.7,
-            'Belgian Pro League': 0.65, 'Turkish Super Lig': 0.6,
-            # ... המשך ליגות לפי צורך ...
-        }
-        league_score = LEAGUE_SCORES.get(league, 0.5)
-
-        # שקלול כולל למדד YSP-75
-        score = (
-            (90 - age) * 0.25 +
-            (minutes / 3000) * 25 +
-            (goals + assists) * 2 +
-            league_score * 20
-        )
-
-        # קטגוריה
+        # ניתוח איכות
         if score >= 75:
-            tag = "\ud83c\udfc6 טופ עולמי!"
+            tag = "🏆 טופ עולמי"
         elif score >= 65:
-            tag = "\u2b50 פוטנציאל ברור – שווה מעקב"
+            tag = "🚀 כישרון עם פוטנציאל ברור"
         elif score >= 55:
-            tag = "\u23f3 כישרון עם צורך ביציבות"
+            tag = "👀 כישרון אך צריך יציבות"
         else:
-            tag = "\ud83c\udfa7 צריך שיפור"
+            tag = "🔍 שחקן בבחינה"
 
-        # הצגה
-        st.subheader(f"{player[found_col]} – ציון: {round(score,1)}")
-        st.markdown(f"**{tag}**")
+        # תצוגת מידע
+        st.subheader(f"{name}")
+        st.markdown(f"**גיל:** {age} | **דקות:** {minutes} | **גולים:** {goals} | **בישולים:** {assists}")
+        st.markdown(f"**ליגה:** {league} (דירוג {league_rank})")
+        st.markdown(f"**מדד YSP-75:** `{score}` → {tag}")
 
-        st.markdown("---")
-        st.write("**נתונים**:")
-        st.write({
-            "גיל": age,
-            "דקות": minutes,
-            "גולים": goals,
-            "בישולים": assists,
-            "ליגה": league
-        })
-
-        st.caption("\u2139\ufe0f מבוסס על נתוני FBref – שימוש מותר עם קרדיט")
+# קרדיט
+st.markdown("---")
+st.caption("נתוני שחקנים באדיבות FBref.com – תחת תנאי שימוש חופשי עם קרדיט")
