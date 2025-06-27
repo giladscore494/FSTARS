@@ -4,6 +4,9 @@ import pandas as pd
 
 # נתיב לקובץ CSV (הקובץ באותה תיקייה כמו app.py)
 DATA_PATH = "players_data-2024_2025.csv"
+import os
+st.write("Current directory:", os.getcwd())
+st.write("Files in directory:", os.listdir())
 
 @st.cache_data
 def load_players():
