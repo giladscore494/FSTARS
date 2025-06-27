@@ -2,17 +2,17 @@ import os
 import streamlit as st
 import pandas as pd
 
+# נתיב לקובץ CSV (הקובץ באותה תיקייה כמו app.py)
 DATA_PATH = "players_data-2024_2025.csv"
-st.write("Current working directory:", os.getcwd())
-st.write("Files in directory:", os.listdir())
 
 @st.cache_data
 def load_players():
     if not os.path.exists(DATA_PATH):
-        st.error(f"שגיאה: הקובץ '{DATA_PATH}' לא נמצא בתיקייה. ודא שהוא קיים לצד app.py ו־requirements.txt.")
+        st.error(f"שגיאה: הקובץ '{DATA_PATH}' לא נמצא בתיקייה. ודא שהוא נמצא לצד app.py.")
         st.stop()
     return pd.read_csv(DATA_PATH, low_memory=False)
 
+df = load_players()
 df = load_players() 
 # דירוג ליגות אירופאיות - לפי דירוג אופ"א נכון ל־2025
 LEAGUE_TIER = {
