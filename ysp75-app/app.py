@@ -2,62 +2,79 @@ import streamlit as st
 import pandas as pd
 import os
 
-DATA_PATH = "players_data-2024_2025.csv"
+# נתיב לקובץ הנתונים
+DATA_PATH = os.path.join(os.path.dirname(__file__), "players_data-2024_2025.csv")
 
+# טוען נתונים עם בדיקה לקובץ
 @st.cache_data
 def load_players():
     if not os.path.exists(DATA_PATH):
-        st.error(f"שגיאה: הקובץ '{DATA_PATH}' לא נמצא. ודא שהוא קיים בתיקייה ysp75-app.")
+        st.error(f"שגיאה: הקובץ '{DATA_PATH}' לא נמצא. ודא שהוא נמצא לצד app.py")
         st.stop()
+    return pd.read_csv(DATA_PATH)
+
+# דירוג ליגות (דוגמה; תוכל לעדכן לפי איכות)
+LEAGUE_SCORES = {
+    'Premier League': 1.0, 'La Liga': 0.95, 'Serie A': 0.9,
+    'Bundesliga': 0.9, 'Ligue 1': 0.85, 'Eredivisie': 0.8,
+    'Liga Portugal': 0.75, 'Championship': 0.7, 'MLS': 0.6,
+    'Brazil Serie A': 0.8, 'Argentina Primera': 0.78,
+}
+
+# מחשב את מדד YSP-75
+def calculate_score(row):
     try:
-        df = pd.read_csv(DATA_PATH)
-        if df.empty:
-            st.error("שגיאה: הקובץ ריק או לא נטען כראוי.")
-            st.stop()
-        return df
-    except Exception as e:
-        st.error(f"שגיאה בטעינת קובץ: {e}")
-        st.stop()
+        age = float(row['Age'])
+        minutes = float(row['Minutes'])
+        goals = float(row['Goals'])
+        assists = float(row['Assists'])
+        league = row['League']
+    except:
+        return 0
 
-def calculate_ysp_score(row):
-    try:
-        age = row['Age']
-        minutes = row['Min']
-        goals = row['Gls']
-        assists = row['Ast']
-    except KeyError:
-        st.error("שגיאה: העמודות הדרושות לא קיימות בקובץ.")
-        st.stop()
+    # ניקוד גיל – צעירים מקבלים יותר
+    age_score = max(0, 30 - age) * 2
 
-    # ניקוד בסיסי לפי ביצועים
-    score = 0
-    if pd.notna(goals):
-        score += goals * 3
-    if pd.notna(assists):
-        score += assists * 2
-    if pd.notna(minutes) and minutes > 0:
-        score += (minutes / 90) * 0.5
-    if pd.notna(age) and age < 23:
-        score += (23 - age) * 1.5
+    # ניקוד סטטיסטיקה
+    stats_score = (goals * 4 + assists * 3 + minutes / 300)
 
-    return round(score, 2)
+    # ניקוד ליגה
+    league_weight = LEAGUE_SCORES.get(league, 0.5)
+    total_score = (age_score + stats_score) * league_weight
 
-# טען דאטה
-df = load_players()
+    return round(total_score, 2)
 
-# ממשק
+# ממשק משתמש
 st.title("🎯 YSP-75 – מדד סיכויי הצלחה לשחקן צעיר")
-name_input = st.text_input("הזן שם שחקן (באנגלית):")
+
+name_input = st.text_input("🔍 הזן שם שחקן (באנגלית):")
 
 if name_input:
+    df = load_players()
+
     if 'Player' not in df.columns:
-        st.error("שגיאה: עמודת 'Player' לא קיימת בקובץ.")
+        st.error("❌ הקובץ לא מכיל את העמודה 'Player'.")
         st.stop()
 
-    filtered = df[df['Player'].str.lower().str.contains(name_input.lower())]
-    if filtered.empty:
+    results = df[df["Player"].str.lower().str.contains(name_input.lower())]
+
+    if results.empty:
         st.warning("שחקן לא נמצא.")
     else:
-        for _, row in filtered.iterrows():
-            score = calculate_ysp_score(row)
-            st.subheader(f"{row['Player']} – ציון YSP: {score}")
+        player = results.iloc[0]
+        score = calculate_score(player)
+
+        st.subheader(f"📊 תוצאה לשחקן {player['Player']}")
+        st.metric("מדד YSP-75", f"{score}")
+
+        if score > 75:
+            st.success("🏆 טופ עולמי – שווה מעקב צמוד")
+        elif score > 65:
+            st.info("🌟 כישרון עם פוטנציאל ברור")
+        elif score > 55:
+            st.warning("🧪 כישרון – אך צריך יציבות")
+        else:
+            st.error("🔎 נתונים נמוכים – לא רלוונטי כרגע")
+
+        st.markdown("**פרטי שחקן:**")
+        st.write(player)
